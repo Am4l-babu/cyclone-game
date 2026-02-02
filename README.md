@@ -6,13 +6,13 @@
 
 - 🎮 Classic cyclone gameplay with 6 progressive difficulty levels
 - 💡 24 WS2812B LEDs for the main game ring
-- 📊 6 LED score indicators to track level progress
+- 📊 **6 LED score indicators with gradient colors** - Green (easy) to Red (hard) showing all completed levels
 - 🌐 WiFi Access Point with modern web interface for remote configuration
 - 🎨 **RGB Color Pickers** - Customize running and target LED colors
 - ⭐ **Custom Preset System** - Create, save, and manage your own difficulty presets
 - ⚙️ Built-in difficulty presets (Easy, Medium, Hard, Insane)
 - 💾 **Persistent Storage** - All settings, colors, and custom presets saved to EEPROM
-- 🎪 Rainbow attract mode animation
+- 🌈 **Waving rainbow attract mode** - Dynamic flowing animation when idle
 - 📱 Responsive dark-themed web UI optimized for mobile and desktop
 
 ## Hardware Requirements
@@ -51,17 +51,28 @@ pio run --target upload
 
 ## How to Play
 
-1. **Power on** - LEDs display rainbow animation (attract mode)
+1. **Power on** - LEDs display flowing rainbow wave animation (attract mode)
 2. **Press button** to start the game
 3. A **moving LED** (customizable color, default red) cycles around the ring
 4. **Target LED(s)** (customizable color, default green) indicate the target zone
 5. **Press button** when the moving LED is in the target zone
-6. Complete all 6 levels to win!
+6. **Watch your progress** - Score LEDs light up with gradient colors (green=easy, red=hard)
+7. Complete all 6 levels to win!
 
 ### Difficulty Levels
 - **Levels 1-2**: Wider target zone (3 LEDs with gradient)
 - **Levels 3-6**: Narrow target zone (1 LED - exact hit required)
 - Each level progressively increases the LED speed
+
+### Score LED Indicators
+- **Accumulative Display**: All completed levels stay lit
+- **Color Gradient**: Visual difficulty feedback
+  - Level 1: 🟢 Green (easiest)
+  - Level 2: 🟢 Yellow-Green
+  - Level 3: 🟡 Yellow
+  - Level 4: 🟠 Orange
+  - Level 5: 🟠 Orange-Red
+  - Level 6: 🔴 Red (hardest)
 
 ## Web Interface
 
@@ -127,6 +138,12 @@ All settings are automatically saved to EEPROM (512 bytes) and persist across po
 - ✅ Custom presets (up to 5, with names and speeds)
 
 ## What's New in Version 1.0
+
+### Enhanced Visual Feedback
+- **Waving Rainbow Attract Mode**: Dynamic flowing rainbow animation instead of static pattern
+- **Gradient Score LEDs**: Color-coded difficulty from green (easy) to red (hard)
+- **Accumulative Progress Display**: All completed levels stay lit on score strip
+- Clear visual representation of game progression
 
 ### Enhanced Web UI
 - Modern dark theme with purple and pink accents
