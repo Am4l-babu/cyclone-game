@@ -71,6 +71,7 @@ CRGB targetLedColor = CRGB(0, 255, 0);   // Default: Green
 
 bool findRandom = false;  // Flag to generate new random target spot
 byte spot = 0;            // Target LED position (green LED) that player must hit
+byte rainbowHue = 0;      // Hue for waving rainbow effect in attract mode
 
 // Custom presets storage
 CustomPreset customPresets[MAX_CUSTOM_PRESETS];
@@ -80,6 +81,7 @@ void clearLEDS();                  // Turn off all LEDs (main and score)
 void PlayGame(byte b1, byte b2);   // Move the red LED and check boundaries
 void winner();                     // Play winning animation and advance level
 void loser();                      // Play losing animation and reset game
+CRGB getLevelColor(byte level);    // Get color for level (green to red gradient)
 
 /* ---------- EEPROM FUNCTIONS ---------- */
 // EEPROM Memory Map:
@@ -490,10 +492,12 @@ void loop() {
   FastLED.setBrightness(brightness);
 
   // ATTRACT MODE (gameState = 0)
-  // Show rainbow animation while waiting for player to start
+  // Show waving rainbow animation while waiting for player to start
   if (gameState == 0) {
-    fill_rainbow(leds, NUM_LEDS, 0, 20);    // Rainbow on main LEDs
-    fill_rainbow(sleds, SCORE_LEDS, 0, 40); // Rainbow on score LEDs
+    // Create waving rainbow effect
+    fill_rainbow(leds, NUM_LEDS, rainbowHue, 10);    // Waving rainbow on main LEDs
+    fill_rainbow(sleds, SCORE_LEDS, rainbowHue, 40); // Waving rainbow on score LEDs
+    rainbowHue++;  // Increment hue to create wave motion
     
     // Start game when button is pressed
     if (digitalRead(BUTTON_PIN) == LOW) {
@@ -504,6 +508,7 @@ void loop() {
       gameState = 1;       // Start at level 1
     }
     FastLED.show();
+    delay(20);  // Small delay for smooth animation
   }
 
   // GAMEPLAY MODE (gameState = 1-6, representing levels 1-6)
@@ -536,7 +541,14 @@ void loop() {
         PlayGame(spot, spot);          // Exact hit required
       }
       
-      sleds[gameState - 1] = targetLedColor;  // Light up score LED with target color
+      // Update score LEDs - light up all completed levels with gradient colors
+      for (byte i = 0; i < gameState; i++) {
+        sleds[i] = getLevelColor(i + 1);  // Green (level 1) to Red (level 6) gradient
+      }
+      // Turn off remaining score LEDs
+      for (byte i = gameState; i < SCORE_LEDS; i++) {
+        sleds[i] = CRGB::Black;
+      }
       FastLED.show();
     }
 
@@ -561,6 +573,15 @@ void loop() {
 }
 
 /* ---------- GAME ENGINE ---------- */
+// Get gradient color for score LED based on level (1-6)
+// Level 1 = Green (easy), Level 6 = Red (hard)
+CRGB getLevelColor(byte level) {
+  // Create gradient from green (HSV 96) to red (HSV 0)
+  // Level 1: Green, Level 6: Red
+  byte hue = map(level, 1, 6, 96, 0);  // 96 = green, 0 = red
+  return CHSV(hue, 255, 255);  // Full saturation and brightness
+}
+
 // Move the running LED around the ring and manage trail
 void PlayGame(byte b1, byte b2) {
   leds[Position] = runningLedColor;  // Set current position to running LED color
