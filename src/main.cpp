@@ -1,13 +1,15 @@
 /*
  * CYCLONE GAME - ESP8266 LED Game with Web Interface
+ * Version: 1.0
  * 
  * A classic arcade-style cyclone game using WS2812B LEDs
  * Features:
  * - 24 main game LEDs that cycle around
  * - 6 score LEDs to track level progress
  * - WiFi Access Point for remote configuration
- * - Web UI for adjusting difficulty and brightness
- * - EEPROM storage for saving settings
+ * - Web UI with RGB color pickers for LED customization
+ * - Custom preset creation and management
+ * - EEPROM storage for saving all settings and presets
  * 
  * Access web interface at: http://192.168.4.1
  */
@@ -19,6 +21,9 @@
 
 /* ---------- ESP8266 FIX ---------- */
 #define tone(a,b,c)  // Disable tone() to avoid conflicts on ESP8266
+
+/* ---------- VERSION ---------- */
+#define VERSION "1.0"
 
 /* ---------- LED & PIN CONFIG ---------- */
 #define NUM_LEDS     24    // Number of LEDs in the main game ring
@@ -46,14 +51,29 @@ unsigned long time_now = 0;     // Timestamp for LED movement timing
 byte Position = 0;              // Current position of the moving red LED (0-23)
 byte level = 0;                 // Last completed level
 
+/* ---------- CUSTOM PRESET STRUCTURE ---------- */
+#define MAX_CUSTOM_PRESETS 5
+struct CustomPreset {
+  char name[20];      // Preset name
+  byte speeds[6];     // Speed for each level
+  bool active;        // Is this slot used?
+};
+
 /* ---------- SETTINGS ---------- */
 // LED speed values for each level (milliseconds between LED movements)
 // Lower values = faster/harder. Each level gets progressively faster.
 byte ledSpeed[6] = {50, 40, 30, 20, 14, 7};  // Level 1-6 speeds (default: Insane preset)
 byte brightness = 55;                        // LED brightness (5-255, default 55)
 
+// LED Color settings (RGB values)
+CRGB runningLedColor = CRGB(255, 0, 0);  // Default: Red
+CRGB targetLedColor = CRGB(0, 255, 0);   // Default: Green
+
 bool findRandom = false;  // Flag to generate new random target spot
 byte spot = 0;            // Target LED position (green LED) that player must hit
+
+// Custom presets storage
+CustomPreset customPresets[MAX_CUSTOM_PRESETS];
 
 /* ---------- FUNCTION DECLARATIONS ---------- */
 void clearLEDS();                  // Turn off all LEDs (main and score)
@@ -62,9 +82,16 @@ void winner();                     // Play winning animation and advance level
 void loser();                      // Play losing animation and reset game
 
 /* ---------- EEPROM FUNCTIONS ---------- */
+// EEPROM Memory Map:
+// 0-5: Level speeds
+// 10: Brightness
+// 11-13: Running LED color (R, G, B)
+// 14-16: Target LED color (R, G, B)
+// 20-200: Custom presets (5 presets x 36 bytes each)
+
 // Load saved settings from EEPROM (persistent storage)
 void loadSettings() {
-  EEPROM.begin(64);  // Initialize EEPROM with 64 bytes
+  EEPROM.begin(512);  // Initialize EEPROM with 512 bytes for more storage
   
   // Load LED speeds for all 6 levels from EEPROM addresses 0-5
   for (int i = 0; i < 6; i++) {
@@ -75,6 +102,30 @@ void loadSettings() {
   // Load brightness from EEPROM address 10
   byte b = EEPROM.read(10);
   if (b >= 5 && b <= 255) brightness = b;  // Validate and load if in range
+  
+  // Load running LED color
+  runningLedColor.r = EEPROM.read(11);
+  runningLedColor.g = EEPROM.read(12);
+  runningLedColor.b = EEPROM.read(13);
+  
+  // Load target LED color
+  targetLedColor.r = EEPROM.read(14);
+  targetLedColor.g = EEPROM.read(15);
+  targetLedColor.b = EEPROM.read(16);
+  
+  // Load custom presets
+  for (int i = 0; i < MAX_CUSTOM_PRESETS; i++) {
+    int addr = 20 + (i * 36);
+    customPresets[i].active = EEPROM.read(addr);
+    if (customPresets[i].active) {
+      for (int j = 0; j < 20; j++) {
+        customPresets[i].name[j] = EEPROM.read(addr + 1 + j);
+      }
+      for (int j = 0; j < 6; j++) {
+        customPresets[i].speeds[j] = EEPROM.read(addr + 21 + j);
+      }
+    }
+  }
 }
 
 // Save a specific level's speed to EEPROM
@@ -87,6 +138,59 @@ void saveSpeed(byte i, byte v) {
 void saveBrightness(byte b) {
   EEPROM.write(10, b);  // Write brightness to EEPROM address 10
   EEPROM.commit();      // Commit changes to flash memory
+}
+
+// Save running LED color to EEPROM
+void saveRunningColor(byte r, byte g, byte b) {
+  EEPROM.write(11, r);
+  EEPROM.write(12, g);
+  EEPROM.write(13, b);
+  EEPROM.commit();
+}
+
+// Save target LED color to EEPROM
+void saveTargetColor(byte r, byte g, byte b) {
+  EEPROM.write(14, r);
+  EEPROM.write(15, g);
+  EEPROM.write(16, b);
+  EEPROM.commit();
+}
+
+// Save a custom preset to EEPROM
+void saveCustomPreset(int idx, String name, byte speeds[6]) {
+  if (idx >= 0 && idx < MAX_CUSTOM_PRESETS) {
+    int addr = 20 + (idx * 36);
+    EEPROM.write(addr, 1);  // Mark as active
+    
+    // Save name (max 19 chars + null terminator)
+    for (int i = 0; i < 20; i++) {
+      EEPROM.write(addr + 1 + i, i < name.length() ? name[i] : 0);
+    }
+    
+    // Save speeds
+    for (int i = 0; i < 6; i++) {
+      EEPROM.write(addr + 21 + i, speeds[i]);
+    }
+    
+    EEPROM.commit();
+    
+    // Update in memory
+    customPresets[idx].active = true;
+    name.toCharArray(customPresets[idx].name, 20);
+    for (int i = 0; i < 6; i++) {
+      customPresets[idx].speeds[i] = speeds[i];
+    }
+  }
+}
+
+// Delete a custom preset
+void deleteCustomPreset(int idx) {
+  if (idx >= 0 && idx < MAX_CUSTOM_PRESETS) {
+    int addr = 20 + (idx * 36);
+    EEPROM.write(addr, 0);  // Mark as inactive
+    EEPROM.commit();
+    customPresets[idx].active = false;
+  }
 }
 
 /* ---------- DIFFICULTY PRESETS ---------- */
@@ -111,32 +215,123 @@ void applyPreset(byte p) {
 
 /* ---------- WEB UI ---------- */
 // Generate HTML page for web interface
-// Provides controls for brightness, presets, and manual speed adjustment
+// Provides controls for brightness, colors, presets, and manual speed adjustment
 String webPage() {
-  String h = "<html><body><h2>Cyclone Game Control</h2>";
-
-  // Brightness slider (5-255)
-  h += "<h3>Brightness</h3>";
-  h += "<input type='range' min='5' max='255' value='" + String(brightness) +
-       "' oninput='fetch(\"/bright?v=\"+this.value)'> " +
-       String(brightness) + "<hr>";
-
-  // Difficulty preset buttons
-  h += "<h3>Difficulty Presets</h3>";
-  h += "<button onclick='fetch(\"/preset?p=0\")'>Easy</button> ";
-  h += "<button onclick='fetch(\"/preset?p=1\")'>Medium</button> ";
-  h += "<button onclick='fetch(\"/preset?p=2\")'>Hard</button> ";
-  h += "<button onclick='fetch(\"/preset?p=3\")'>Insane</button><hr>";
-
-  // Individual speed sliders for each level (10-250 ms)
-  h += "<h3>Manual Speed Control</h3>";
-  for (int i = 0; i < 6; i++) {
-    h += "Level " + String(i + 1) + ": ";
-    h += "<input type='range' min='10' max='250' value='" + String(ledSpeed[i]) +
-         "' oninput='fetch(\"/speed?l=" + String(i) + "&v=\"+this.value)'> ";
-    h += String(ledSpeed[i]) + " ms<br><br>";
+  String h = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
+  h += "<style>";
+  h += "body{font-family:Arial;margin:20px;background:#1a1a2e;color:#eee}";
+  h += "h2{color:#0f3460;background:#16213e;padding:15px;border-radius:8px;text-align:center}";
+  h += "h3{color:#e94560;border-bottom:2px solid #e94560;padding-bottom:5px}";
+  h += ".section{background:#16213e;padding:20px;margin:15px 0;border-radius:10px;box-shadow:0 4px 6px rgba(0,0,0,0.3)}";
+  h += "input[type=range]{width:100%;height:25px;-webkit-appearance:none;background:#0f3460;border-radius:5px;outline:none}";
+  h += "input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:25px;height:25px;background:#e94560;border-radius:50%;cursor:pointer}";
+  h += "input[type=range]::-moz-range-thumb{width:25px;height:25px;background:#e94560;border-radius:50%;cursor:pointer}";
+  h += "button{background:#e94560;color:#fff;border:none;padding:12px 24px;margin:5px;border-radius:6px;cursor:pointer;font-size:16px;font-weight:bold}";
+  h += "button:hover{background:#ff6b81}";
+  h += "button:active{background:#c23b55}";
+  h += ".preset-btn{background:#533483}";
+  h += ".preset-btn:hover{background:#6a4494}";
+  h += ".custom-preset-btn{background:#05a8aa}";
+  h += ".custom-preset-btn:hover{background:#08c9cc}";
+  h += ".delete-btn{background:#dc3545;padding:8px 16px;font-size:14px}";
+  h += ".delete-btn:hover{background:#c82333}";
+  h += "input[type=text],input[type=number]{width:100%;padding:10px;margin:5px 0;border:2px solid #0f3460;border-radius:5px;background:#1a1a2e;color:#eee;font-size:16px}";
+  h += ".color-picker{display:inline-block;width:60px;height:60px;border-radius:50%;border:3px solid #eee;cursor:pointer;margin:10px}";
+  h += ".speed-input{width:70px;padding:8px;display:inline-block;text-align:center}";
+  h += ".value-display{display:inline-block;min-width:60px;color:#e94560;font-weight:bold;font-size:18px}";
+  h += ".info{background:#533483;padding:10px;border-radius:5px;margin:10px 0;font-size:14px}";
+  h += ".custom-preset-item{background:#0f3460;padding:15px;margin:10px 0;border-radius:8px;display:flex;justify-content:space-between;align-items:center}";
+  h += "</style></head><body>";
+  
+  h += "<h2>🎮 Cyclone Game Control Panel v" + String(VERSION) + "</h2>";
+  
+  // Brightness Control
+  h += "<div class='section'><h3>💡 Brightness</h3>";
+  h += "<input type='range' min='5' max='255' value='" + String(brightness) + "' ";
+  h += "oninput='this.nextElementSibling.innerHTML=this.value;fetch(\"/bright?v=\"+this.value)'>";
+  h += "<span class='value-display'>" + String(brightness) + "</span></div>";
+  
+  // Color Pickers
+  h += "<div class='section'><h3>🎨 LED Colors</h3>";
+  h += "<div><b>Running LED Color:</b><br>";
+  h += "<input type='color' class='color-picker' id='runColor' value='#";
+  h += String(runningLedColor.r < 16 ? "0" : "") + String(runningLedColor.r, HEX);
+  h += String(runningLedColor.g < 16 ? "0" : "") + String(runningLedColor.g, HEX);
+  h += String(runningLedColor.b < 16 ? "0" : "") + String(runningLedColor.b, HEX);
+  h += "' onchange='setRunColor(this.value)'></div>";
+  
+  h += "<div><b>Target LED Color:</b><br>";
+  h += "<input type='color' class='color-picker' id='targColor' value='#";
+  h += String(targetLedColor.r < 16 ? "0" : "") + String(targetLedColor.r, HEX);
+  h += String(targetLedColor.g < 16 ? "0" : "") + String(targetLedColor.g, HEX);
+  h += String(targetLedColor.b < 16 ? "0" : "") + String(targetLedColor.b, HEX);
+  h += "' onchange='setTargColor(this.value)'></div></div>";
+  
+  // Built-in Presets
+  h += "<div class='section'><h3>⚡ Built-in Difficulty Presets</h3>";
+  h += "<button class='preset-btn' onclick='fetch(\"/preset?p=0\")'>🟢 Easy</button>";
+  h += "<button class='preset-btn' onclick='fetch(\"/preset?p=1\")'>🟡 Medium</button>";
+  h += "<button class='preset-btn' onclick='fetch(\"/preset?p=2\")'>🟠 Hard</button>";
+  h += "<button class='preset-btn' onclick='fetch(\"/preset?p=3\")'>🔴 Insane</button></div>";
+  
+  // Custom Presets
+  h += "<div class='section'><h3>⭐ Custom Presets</h3>";
+  
+  // Show existing custom presets
+  for (int i = 0; i < MAX_CUSTOM_PRESETS; i++) {
+    if (customPresets[i].active) {
+      h += "<div class='custom-preset-item'>";
+      h += "<button class='custom-preset-btn' onclick='fetch(\"/custompreset?i=" + String(i) + "\")'>";
+      h += String(customPresets[i].name) + "</button>";
+      h += "<button class='delete-btn' onclick='if(confirm(\"Delete preset?\"))fetch(\"/delpreset?i=" + String(i) + "\").then(()=>location.reload())'>Delete</button>";
+      h += "</div>";
+    }
   }
-
+  
+  // Add new preset form
+  h += "<div class='info'>Create new custom preset:</div>";
+  h += "<input type='text' id='presetName' placeholder='Preset Name' maxlength='19'><br>";
+  h += "Level Speeds (ms):<br>";
+  for (int i = 0; i < 6; i++) {
+    h += "L" + String(i+1) + ": <input type='number' class='speed-input' id='s" + String(i) + "' value='" + String(ledSpeed[i]) + "' min='10' max='250'> ";
+  }
+  h += "<br><button onclick='addPreset()'>➕ Add Preset</button></div>";
+  
+  // Manual Speed Control
+  h += "<div class='section'><h3>🎚️ Manual Speed Control</h3>";
+  for (int i = 0; i < 6; i++) {
+    h += "<b>Level " + String(i + 1) + ":</b> ";
+    h += "<input type='range' min='10' max='250' value='" + String(ledSpeed[i]) + "' ";
+    h += "oninput='this.nextElementSibling.innerHTML=this.value+\" ms\";fetch(\"/speed?l=" + String(i) + "&v=\"+this.value)'>";
+    h += "<span class='value-display'>" + String(ledSpeed[i]) + " ms</span><br>";
+  }
+  h += "</div>";
+  
+  // JavaScript
+  h += "<script>";
+  h += "function setRunColor(c){";
+  h += "let r=parseInt(c.substr(1,2),16);";
+  h += "let g=parseInt(c.substr(3,2),16);";
+  h += "let b=parseInt(c.substr(5,2),16);";
+  h += "fetch('/runcolor?r='+r+'&g='+g+'&b='+b);}";
+  
+  h += "function setTargColor(c){";
+  h += "let r=parseInt(c.substr(1,2),16);";
+  h += "let g=parseInt(c.substr(3,2),16);";
+  h += "let b=parseInt(c.substr(5,2),16);";
+  h += "fetch('/targcolor?r='+r+'&g='+g+'&b='+b);}";
+  
+  h += "function addPreset(){";
+  h += "let n=document.getElementById('presetName').value;";
+  h += "if(!n){alert('Enter preset name');return;}";
+  h += "let s='';";
+  h += "for(let i=0;i<6;i++){";
+  h += "let v=document.getElementById('s'+i).value;";
+  h += "if(v<10||v>250){alert('Speed must be 10-250');return;}";
+  h += "s+=(i>0?',':'')+v;}";
+  h += "fetch('/addpreset?n='+encodeURIComponent(n)+'&s='+s).then(()=>location.reload());}";
+  h += "</script>";
+  
   h += "</body></html>";
   return h;
 }
@@ -179,6 +374,82 @@ void handlePreset() {
   server.send(200, "text/plain", "OK");  // Send response
 }
 
+// Handle running LED color change
+void handleRunningColor() {
+  if (server.hasArg("r") && server.hasArg("g") && server.hasArg("b")) {
+    byte r = server.arg("r").toInt();
+    byte g = server.arg("g").toInt();
+    byte b = server.arg("b").toInt();
+    runningLedColor = CRGB(r, g, b);
+    saveRunningColor(r, g, b);
+  }
+  server.send(200, "text/plain", "OK");
+}
+
+// Handle target LED color change
+void handleTargetColor() {
+  if (server.hasArg("r") && server.hasArg("g") && server.hasArg("b")) {
+    byte r = server.arg("r").toInt();
+    byte g = server.arg("g").toInt();
+    byte b = server.arg("b").toInt();
+    targetLedColor = CRGB(r, g, b);
+    saveTargetColor(r, g, b);
+  }
+  server.send(200, "text/plain", "OK");
+}
+
+// Handle add custom preset
+void handleAddPreset() {
+  if (server.hasArg("n") && server.hasArg("s")) {
+    String name = server.arg("n");
+    String speedsStr = server.arg("s");
+    
+    // Parse speeds
+    byte speeds[6];
+    int idx = 0;
+    int lastComma = -1;
+    for (int i = 0; i <= speedsStr.length(); i++) {
+      if (i == speedsStr.length() || speedsStr[i] == ',') {
+        speeds[idx++] = speedsStr.substring(lastComma + 1, i).toInt();
+        lastComma = i;
+        if (idx >= 6) break;
+      }
+    }
+    
+    // Find empty slot
+    for (int i = 0; i < MAX_CUSTOM_PRESETS; i++) {
+      if (!customPresets[i].active) {
+        saveCustomPreset(i, name, speeds);
+        break;
+      }
+    }
+  }
+  server.send(200, "text/plain", "OK");
+}
+
+// Handle apply custom preset
+void handleCustomPreset() {
+  if (server.hasArg("i")) {
+    int idx = server.arg("i").toInt();
+    if (idx >= 0 && idx < MAX_CUSTOM_PRESETS && customPresets[idx].active) {
+      for (int i = 0; i < 6; i++) {
+        ledSpeed[i] = customPresets[idx].speeds[i];
+        saveSpeed(i, customPresets[idx].speeds[i]);
+      }
+    }
+  }
+  server.send(200, "text/plain", "OK");
+}
+
+// Handle delete custom preset
+void handleDeletePreset() {
+  if (server.hasArg("i")) {
+    int idx = server.arg("i").toInt();
+    deleteCustomPreset(idx);
+  }
+  server.send(200, "text/plain", "OK");
+}
+
 /* ---------- SETUP ---------- */
 void setup() {
   // Initialize serial communication for debugging
@@ -200,10 +471,15 @@ void setup() {
   WiFi.softAP(ap_ssid, ap_pass);  // Default IP will be 192.168.4.1
 
   // Setup web server routes
-  server.on("/", handleRoot);            // Main page
-  server.on("/speed", handleSpeed);      // Speed adjustment endpoint
-  server.on("/bright", handleBrightness); // Brightness endpoint
-  server.on("/preset", handlePreset);    // Preset selection endpoint
+  server.on("/", handleRoot);                  // Main page
+  server.on("/speed", handleSpeed);            // Speed adjustment endpoint
+  server.on("/bright", handleBrightness);      // Brightness endpoint
+  server.on("/preset", handlePreset);          // Preset selection endpoint
+  server.on("/runcolor", handleRunningColor);  // Running LED color
+  server.on("/targcolor", handleTargetColor);  // Target LED color
+  server.on("/addpreset", handleAddPreset);    // Add custom preset
+  server.on("/custompreset", handleCustomPreset); // Apply custom preset
+  server.on("/delpreset", handleDeletePreset); // Delete custom preset
   server.begin();  // Start the web server
 }
 
@@ -245,20 +521,22 @@ void loop() {
         findRandom = false;
       }
       
-      // Levels 1-2: Wider target (3 LEDs - orange, green, orange)
+      // Levels 1-2: Wider target (3 LEDs - use target color with dimmed sides)
       if (gameState <= 2) {
-        leds[spot - 1] = CRGB(255,140,0);  // Orange LED before target
-        leds[spot] = CRGB::Green;           // Green target LED
-        leds[spot + 1] = CRGB(255,110,0);  // Orange LED after target
-        PlayGame(spot - 1, spot + 1);       // Set boundaries for hit detection
+        leds[spot - 1] = targetLedColor;   // Target color (dimmed)
+        leds[spot - 1].nscale8(180);       // Dim to 70%
+        leds[spot] = targetLedColor;       // Full brightness target LED
+        leds[spot + 1] = targetLedColor;   // Target color (dimmed)
+        leds[spot + 1].nscale8(140);       // Dim to 55%
+        PlayGame(spot - 1, spot + 1);      // Set boundaries for hit detection
       } 
-      // Levels 3-6: Narrow target (1 LED - green only)
+      // Levels 3-6: Narrow target (1 LED - target color only)
       else {
-        leds[spot] = CRGB::Green;  // Single green target LED
-        PlayGame(spot, spot);       // Exact hit required
+        leds[spot] = targetLedColor;  // Single target LED with custom color
+        PlayGame(spot, spot);          // Exact hit required
       }
       
-      sleds[gameState - 1] = CRGB::Green;  // Light up score LED for current level
+      sleds[gameState - 1] = targetLedColor;  // Light up score LED with target color
       FastLED.show();
     }
 
@@ -283,9 +561,9 @@ void loop() {
 }
 
 /* ---------- GAME ENGINE ---------- */
-// Move the red LED around the ring and manage trail
+// Move the running LED around the ring and manage trail
 void PlayGame(byte b1, byte b2) {
-  leds[Position] = CRGB::Red;  // Set current position to red
+  leds[Position] = runningLedColor;  // Set current position to running LED color
   
   // Clear the LED behind if it's outside the target zone
   if (Position < b1 + 1 || Position > b2 + 1)
@@ -295,11 +573,11 @@ void PlayGame(byte b1, byte b2) {
   Position = (Position + 1) % NUM_LEDS;
 }
 
-// Win animation - flash green LEDs 3 times and advance to next level
+// Win animation - flash target color LEDs 3 times and advance to next level
 void winner() {
-  // Flash green 3 times
+  // Flash target color 3 times
   for (byte i = 0; i < 3; i++) {
-    fill_solid(leds, NUM_LEDS, CRGB::Green);  // All LEDs green
+    fill_solid(leds, NUM_LEDS, targetLedColor);  // All LEDs in target color
     FastLED.show();
     delay(500);
     clearLEDS();  // Turn off
@@ -316,11 +594,11 @@ void winner() {
   if (gameState > 6) gameState = 0;
 }
 
-// Lose animation - flash red LEDs 3 times and return to attract mode
+// Lose animation - flash running color LEDs 3 times and return to attract mode
 void loser() {
-  // Flash red 3 times
+  // Flash running color 3 times
   for (byte i = 0; i < 3; i++) {
-    fill_solid(leds, NUM_LEDS, CRGB::Red);  // All LEDs red
+    fill_solid(leds, NUM_LEDS, runningLedColor);  // All LEDs in running color
     FastLED.show();
     delay(500);
     clearLEDS();  // Turn off
