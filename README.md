@@ -1,6 +1,46 @@
-# Cyclone Game - ESP8266 LED Arcade Game
+<div align="center">
 
-**Version 1.0** - A classic arcade-style cyclone game built with ESP8266 and WS2812B LEDs, featuring an advanced web-based configuration interface with full customization.
+<img src="docs/banner.svg" alt="Cyclone Game banner" width="100%"/>
+
+### 🔴 🟢 🟡 🟠 &nbsp; Time it. Hit the zone. Level up. &nbsp; 🟠 🟡 🟢 🔴
+
+**A classic arcade-style cyclone game** built with an ESP8266 and a 24-LED WS2812B ring,
+with a 6-LED score strip and a fully customizable WiFi web interface.
+
+![ESP8266](https://img.shields.io/badge/MCU-ESP8266-red?style=for-the-badge&logo=espressif&logoColor=white)
+![PlatformIO](https://img.shields.io/badge/PlatformIO-VS%20Code-F5822A?style=for-the-badge&logo=platformio&logoColor=white)
+![C++](https://img.shields.io/badge/C%2B%2B-Arduino-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)
+![WS2812B](https://img.shields.io/badge/LEDs-WS2812B-e94560?style=for-the-badge)
+
+[🕹 Try it now](#-try-it-in-your-browser) ·
+[🎮 Play](#how-to-play) ·
+[🔌 Hardware](#hardware-requirements) ·
+[🌐 Web interface](#web-interface)
+
+</div>
+
+---
+
+## 🕹 Try it in your browser
+
+No board yet? **Play the real game logic right here** — it's a faithful browser port of the
+firmware (same 24-LED ring, same per-level speed curve, same win/lose flashes), plus the same
+difficulty presets and RGB color pickers as the real device's web UI.
+
+<div align="center">
+
+<a href="https://htmlpreview.github.io/?https://github.com/Am4l-babu/cyclone-game/blob/main/docs/simulator.html">
+  <img src="docs/simulator-preview.png" alt="Cyclone Game browser simulator" width="300"/>
+</a>
+
+### [▶️ &nbsp;PLAY THE SIMULATOR](https://htmlpreview.github.io/?https://github.com/Am4l-babu/cyclone-game/blob/main/docs/simulator.html)
+
+<sub>Tap the button or press <kbd>Space</kbd> when the moving LED is in the glowing target zone
+· or just open <a href="docs/simulator.html"><code>docs/simulator.html</code></a> locally, no install needed</sub>
+
+</div>
+
+---
 
 ## ✨ Features
 
