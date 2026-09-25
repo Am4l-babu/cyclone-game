@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cyclone Game Simulator</title>
+<meta name="description" content="Play the Cyclone Game ESP8266 firmware in your browser: same 24-LED ring, same speed curve, same win/lose flashes.">
+<style>
+  :root {
+    --bg: #1a1a2e; --card: #16213e; --line: #0f3460; --fg: #eee; --mut: #8fa3c7;
+    --pink: #e94560; --pink2: #ff6b81; --purple: #533483; --teal: #05a8aa; --off: #232a4d;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #eef1fb; --card: #ffffff; --line: #c7d2ee; --fg: #1a1a2e; --mut: #5b6b95; --off: #e2e7f7; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+    display: flex; flex-direction: column; align-items: center; padding: 24px 16px 40px;
+  }
+  h1 { margin: 0; font-size: clamp(26px, 7vw, 38px); font-weight: 800; letter-spacing: .03em; text-align: center; }
+  h1 .w { color: var(--pink); text-shadow: 0 0 18px rgba(233,69,96,.5); }
+  .sub { color: var(--mut); margin: 6px 0 22px; text-align: center; max-width: 44ch; line-height: 1.45; }
+
+  .device {
+    width: min(100%, 420px); background: var(--card); border: 1px solid var(--line);
+    border-radius: 26px; padding: 20px; box-shadow: 0 16px 44px rgba(0,0,0,.35);
+  }
+
+  .status {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #000; border: 3px solid var(--line); border-radius: 10px;
+    padding: 10px 14px; font: 700 13px/1.2 Consolas, monospace; letter-spacing: .04em;
+    color: #7fffd4; margin-bottom: 4px;
+  }
+  .status span:first-child { color: var(--pink2); }
+  .status .msg { color: #7fffd4; text-align: right; }
+
+  /* ---- Main 24-LED ring + center button ---- */
+  .ring { position: relative; width: 100%; aspect-ratio: 1; margin-top: 16px; }
+  .dot {
+    position: absolute; width: 6.6%; aspect-ratio: 1; border-radius: 50%;
+    transform: translate(-50%, -50%); background: var(--off); transition: background .04s, box-shadow .04s;
+  }
+  .hub {
+    position: absolute; inset: 27%; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #ffffff22, transparent 60%), var(--purple);
+    border: 4px solid #7a4fc9; cursor: pointer; color: #fff; -webkit-tap-highlight-color: transparent;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    font: 800 15px/1.25 inherit; padding: 10%; user-select: none; touch-action: manipulation;
+    box-shadow: 0 0 0 0 rgba(233,69,96,0); transition: box-shadow .15s, transform .06s, background .2s;
+  }
+  .hub:active { transform: scale(.96); }
+  .hub.pulse { animation: pulse 1.4s ease-in-out infinite; }
+  .hub.stopnow { background: var(--pink); border-color: var(--pink2); }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(83,52,131,.55); }
+    50% { box-shadow: 0 0 0 16px rgba(83,52,131,0); }
+  }
+  .hub:focus-visible { outline: 2px solid var(--fg); outline-offset: 4px; }
+
+  /* ---- 6 score LEDs ---- */
+  .score { display: flex; justify-content: center; gap: 10px; margin-top: 18px; }
+  .sdot {
+    width: 15%; max-width: 34px; aspect-ratio: 1; border-radius: 50%;
+    background: var(--off); box-shadow: inset 0 0 0 2px var(--line);
+    transition: background .3s, box-shadow .3s;
+  }
+  .score-label { text-align: center; color: var(--mut); font-size: 11px; letter-spacing: .12em; margin-top: 6px; }
+
+  /* ---- controls ---- */
+  .section { margin-top: 18px; }
+  .section h3 {
+    font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--mut);
+    margin: 0 0 8px; display: flex; align-items: center; gap: 6px;
+  }
+  .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    background: transparent; color: var(--fg); border: 1px solid var(--line); border-radius: 999px;
+    padding: 8px 14px; font: 700 12.5px/1 inherit; cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  .btn:hover { border-color: var(--mut); }
+  .btn[aria-pressed="true"] { background: var(--pink); border-color: var(--pink); color: #fff; }
+  .swatches { display: flex; align-items: center; justify-content: center; gap: 22px; flex-wrap: wrap; }
+  .swatch { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; color: var(--mut); }
+  input[type=color] {
+    width: 46px; height: 46px; border-radius: 50%; border: 3px solid var(--line);
+    padding: 0; cursor: pointer; background: none; overflow: hidden;
+  }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 50%; }
+  input[type=color]::-webkit-color-swatch { border: none; border-radius: 50%; }
+  input[type=color]::-moz-color-swatch { border: none; border-radius: 50%; }
+  input[type=range] {
+    width: 100%; height: 20px; -webkit-appearance: none; background: transparent; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 4px; background: var(--line); }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; margin-top: -7px; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--pink); border: 3px solid #fff2; cursor: pointer;
+  }
+  input[type=range]::-moz-range-track { height: 6px; border-radius: 4px; background: var(--line); }
+  input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--pink); border: none; cursor: pointer; }
+  .slider-row { display: flex; align-items: center; gap: 10px; }
+  .slider-row b { min-width: 66px; font-size: 12.5px; color: var(--mut); }
+  .val { min-width: 32px; text-align: right; font: 700 12.5px Consolas, monospace; color: var(--pink2); }
+
+  .hint { color: var(--mut); font-size: 13px; text-align: center; margin: 16px 0 0; line-height: 1.55; max-width: 420px; }
+  kbd { font: 600 12px Consolas, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; }
+
+  details { width: min(100%, 420px); margin-top: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+  summary { cursor: pointer; padding: 10px 14px; font-size: 13px; color: var(--mut); }
+  pre {
+    margin: 0; padding: 0 14px 12px; font: 12px/1.5 Consolas, monospace; color: var(--teal);
+    max-height: 160px; overflow: auto; white-space: pre-wrap;
+  }
+  footer { margin-top: 22px; color: var(--mut); font-size: 12px; text-align: center; line-height: 1.6; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+  <h1><span class="w">CYCLONE</span> GAME</h1>
+  <p class="sub">A browser port of the ESP8266 firmware: same 24-LED ring, same speed curve per level, same win / lose flashes.</p>
+
+  <main class="device">
+    <div class="status">
+      <span id="stLevel">LVL --</span>
+      <span class="msg" id="stMsg">ATTRACT MODE</span>
+    </div>
+
+    <div class="ring" id="ring">
+      <button class="hub pulse" id="hub" aria-label="Cyclone button">PRESS<br>TO PLAY</button>
+    </div>
+
+    <div class="score" id="score" aria-hidden="true"></div>
+    <div class="score-label">LEVEL 1 &nbsp;→&nbsp; LEVEL 6</div>
+
+    <div class="section">
+      <h3>⚡ Difficulty</h3>
+      <div class="row" id="presets">
+        <button class="btn" data-p="0">🟢 Easy</button>
+        <button class="btn" data-p="1">🟡 Medium</button>
+        <button class="btn" data-p="2">🟠 Hard</button>
+        <button class="btn" data-p="3" aria-pressed="true">🔴 Insane</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>🎨 LED Colors</h3>
+      <div class="swatches">
+        <div class="swatch"><input type="color" id="runColor" value="#ff0000"><span>Running LED</span></div>
+        <div class="swatch"><input type="color" id="targColor" value="#00ff00"><span>Target LED</span></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>💡 Brightness</h3>
+      <div class="slider-row">
+        <b>5–255</b>
+        <input type="range" id="bright" min="5" max="255" value="55">
+        <span class="val" id="brightVal">55</span>
+      </div>
+    </div>
+
+    <p class="hint">Tap the button (or press <kbd>Space</kbd>) when the moving LED is in the glowing target zone.<br>
+      Levels 1–2 give a wide 3-LED window — levels 3–6 need an exact hit.</p>
+  </main>
+
+  <details>
+    <summary>Serial monitor (115200 baud, mirrors the real firmware log)</summary>
+    <pre id="serial">Cyclone Game v1.0 ready.
+</pre>
+  </details>
+
+  <footer>
+    Recreation of <code>src/main.cpp</code> · the real thing runs on an ESP8266 + WS2812B<br>
+    <a href="https://github.com/Am4l-babu/cyclone-game">github.com/Am4l-babu/cyclone-game</a>
+  </footer>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ *
+ *  Constants mirrored from src/main.cpp
+ * ------------------------------------------------------------------ */
+const NUM_LEDS = 24;
+const SCORE_LEDS = 6;
+const PRESETS = [
+  [160, 140, 120, 100, 80, 60],   // Easy
+  [120, 100, 80, 60, 40, 30],     // Medium
+  [80, 65, 50, 35, 25, 18],       // Hard
+  [50, 40, 30, 20, 14, 7],        // Insane
+];
+
+const $ = (s) => document.querySelector(s);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ------------------------------------------------------------------ *
+ *  Build the 24-LED ring + 6 score LEDs
+ * ------------------------------------------------------------------ */
+const ringEl = $("#ring");
+const hub = $("#hub");
+const dots = [];
+for (let i = 0; i < NUM_LEDS; i++) {
+  const a = (i / NUM_LEDS) * Math.PI * 2 - Math.PI / 2;
+  const d = document.createElement("i");
+  d.className = "dot";
+  d.style.left = 50 + 44 * Math.cos(a) + "%";
+  d.style.top = 50 + 44 * Math.sin(a) + "%";
+  ringEl.appendChild(d);
+  dots.push(d);
+}
+const scoreEl = $("#score");
+const sdots = [];
+for (let i = 0; i < SCORE_LEDS; i++) {
+  const d = document.createElement("i");
+  d.className = "sdot";
+  scoreEl.appendChild(d);
+  sdots.push(d);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Color helpers (approximates FastLED's CRGB / CHSV)
+ * ------------------------------------------------------------------ */
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function rgbCss([r, g, b]) { return `rgb(${r},${g},${b})`; }
+function scale8([r, g, b], s) { return [r * s / 255 | 0, g * s / 255 | 0, b * s / 255 | 0]; }
+function hsv(h, s, v) { // h,s,v in 0-255, like CHSV
+  const hh = h / 255 * 6, i = Math.floor(hh) % 6, f = hh - Math.floor(hh);
+  const S = s / 255, V = v / 255;
+  const p = V * (1 - S), q = V * (1 - S * f), t = V * (1 - S * (1 - f));
+  let r, g, b;
+  switch (i) {
+    case 0: [r, g, b] = [V, t, p]; break;
+    case 1: [r, g, b] = [q, V, p]; break;
+    case 2: [r, g, b] = [p, V, t]; break;
+    case 3: [r, g, b] = [p, q, V]; break;
+    case 4: [r, g, b] = [t, p, V]; break;
+    default: [r, g, b] = [V, p, q]; break;
+  }
+  return [r * 255 | 0, g * 255 | 0, b * 255 | 0];
+}
+function levelColor(level) { // green (easy) -> red (hard), like getLevelColor()
+  const hue = 96 - (level - 1) * (96 / 5);
+  return hsv(hue, 255, 255);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Rendering: leds[] / sleds[] arrays -> DOM, scaled by "brightness"
+ * ------------------------------------------------------------------ */
+const leds = Array.from({ length: NUM_LEDS }, () => null);   // null = off, else [r,g,b]
+const sleds = Array.from({ length: SCORE_LEDS }, () => null);
+let brightness = 55;
+
+function paintDot(el, rgb) {
+  if (!rgb) { el.style.background = ""; el.style.boxShadow = ""; return; }
+  const b = scale8(rgb, clamp(brightness * 1.6, 60, 255));
+  const css = rgbCss(b);
+  el.style.background = css;
+  el.style.boxShadow = `0 0 12px 2px ${css}`;
+}
+function render() {
+  for (let i = 0; i < NUM_LEDS; i++) paintDot(dots[i], leds[i]);
+  for (let i = 0; i < SCORE_LEDS; i++) paintDot(sdots[i], sleds[i]);
+}
+function clearLEDS() { leds.fill(null); sleds.fill(null); }
+
+/* ------------------------------------------------------------------ *
+ *  Settings (colors / speeds / brightness) — driven by the UI panel
+ * ------------------------------------------------------------------ */
+let runningColor = hexToRgb("#ff0000");
+let targetColor = hexToRgb("#00ff00");
+let ledSpeed = PRESETS[3].slice();
+
+$("#runColor").addEventListener("input", (e) => { runningColor = hexToRgb(e.target.value); });
+$("#targColor").addEventListener("input", (e) => { targetColor = hexToRgb(e.target.value); });
+$("#bright").addEventListener("input", (e) => {
+  brightness = +e.target.value; $("#brightVal").textContent = brightness; render();
+});
+
+const presetBtns = [...document.querySelectorAll("#presets .btn")];
+presetBtns.forEach((b) => b.addEventListener("click", () => {
+  const p = +b.dataset.p;
+  ledSpeed = PRESETS[p].slice();
+  presetBtns.forEach((x) => x.removeAttribute("aria-pressed"));
+  b.setAttribute("aria-pressed", "true");
+  log(`Preset applied: ${["Easy", "Medium", "Hard", "Insane"][p]} (${ledSpeed.join(",")} ms)`);
+}));
+
+/* ------------------------------------------------------------------ *
+ *  Status readout + serial log
+ * ------------------------------------------------------------------ */
+const stLevel = $("#stLevel"), stMsg = $("#stMsg");
+const serial = $("#serial");
+function log(line) {
+  serial.textContent += line + "\n";
+  const lines = serial.textContent.split("\n");
+  if (lines.length > 60) serial.textContent = lines.slice(-60).join("\n");
+  serial.scrollTop = serial.scrollHeight;
+}
+function setStatus(levelTxt, msg) { stLevel.textContent = levelTxt; stMsg.textContent = msg; }
+
+/* ------------------------------------------------------------------ *
+ *  Button input: one flag, consumed once per read — like digitalRead()
+ * ------------------------------------------------------------------ */
+let buttonDown = false;
+function press() { buttonDown = true; }
+hub.addEventListener("pointerdown", (e) => { e.preventDefault(); press(); });
+addEventListener("keydown", (e) => {
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.code === "Space" || e.key === " ") { e.preventDefault(); press(); }
+});
+
+/* ------------------------------------------------------------------ *
+ *  Game engine — a direct port of loop() / PlayGame() / winner() / loser()
+ * ------------------------------------------------------------------ */
+let gameState = 0;      // 0=attract, 1-6=levels, 98=win, 99=lose
+let position = 0;
+let level = 0;
+let spot = 0;
+let findRandom = false;
+let rainbowHue = 0;
+let timeNow = 0;
+let running = true;
+let busy = false;       // true while a win/lose flash sequence owns the LEDs
+
+function playGame(b1, b2) {
+  leds[position] = runningColor;
+  if (position < b1 + 1 || position > b2 + 1) leds[(position + NUM_LEDS - 1) % NUM_LEDS] = null;
+  position = (position + 1) % NUM_LEDS;
+}
+
+async function winner() {
+  busy = true;
+  hub.classList.remove("stopnow");
+  setStatus(`LVL ${level}`, "🎯 HIT!");
+  log(`HIT! Level ${level} complete.`);
+  for (let i = 0; i < 3; i++) {
+    leds.fill(targetColor); render(); await sleep(500);
+    leds.fill(null); render(); await sleep(500);
+  }
+  findRandom = true; position = 0;
+  gameState = level + 1;
+  if (gameState > 6) {
+    setStatus("WIN!", "🏆 ALL LEVELS CLEARED");
+    log("*** ALL 6 LEVELS CLEARED — WINNER! ***");
+    await sleep(600);
+    gameState = 0;
+  }
+  busy = false;
+}
+
+async function loser(failedLevel) {
+  busy = true;
+  hub.classList.remove("stopnow");
+  setStatus(`LVL ${failedLevel}`, "✖ MISS!");
+  log(`MISS! Game over at level ${failedLevel}.`);
+  for (let i = 0; i < 3; i++) {
+    leds.fill(runningColor); render(); await sleep(500);
+    leds.fill(null); render(); await sleep(500);
+  }
+  gameState = 0;
+  busy = false;
+}
+
+function updateScoreLeds() {
+  for (let i = 0; i < gameState; i++) sleds[i] = levelColor(i + 1);
+  for (let i = gameState; i < SCORE_LEDS; i++) sleds[i] = null;
+}
+
+function frame(ts) {
+  if (running) requestAnimationFrame(frame);
+  if (busy) return;
+
+  if (gameState === 0) {
+    hub.classList.add("pulse");
+    hub.innerHTML = "PRESS<br>TO PLAY";
+    for (let i = 0; i < NUM_LEDS; i++) leds[i] = hsv((rainbowHue + i * (255 / NUM_LEDS) * 0.4) & 255, 255, 255);
+    for (let i = 0; i < SCORE_LEDS; i++) sleds[i] = hsv((rainbowHue + i * (255 / SCORE_LEDS) * 0.9) & 255, 255, 255);
+    rainbowHue = (rainbowHue + 2) & 255;
+    render();
+    setStatus("LVL --", "ATTRACT MODE");
+
+    if (buttonDown) {
+      buttonDown = false;
+      position = 0; findRandom = true; clearLEDS(); gameState = 1;
+      log("Game started.");
+    }
+    return;
+  }
+
+  if (gameState >= 1 && gameState <= 6) {
+    hub.classList.remove("pulse");
+    hub.classList.add("stopnow");
+    hub.innerHTML = "STOP!";
+    const period = ledSpeed[gameState - 1];
+
+    if (ts - timeNow > period) {
+      timeNow = ts;
+      if (findRandom) { spot = Math.floor(Math.random() * (NUM_LEDS - 6)) + 3; findRandom = false; log(`Level ${gameState}: target @ LED ${spot} (speed ${period}ms)`); }
+
+      if (gameState <= 2) {
+        leds[spot - 1] = scale8(targetColor, 180);
+        leds[spot] = targetColor;
+        leds[spot + 1] = scale8(targetColor, 140);
+        playGame(spot - 1, spot + 1);
+      } else {
+        leds[spot] = targetColor;
+        playGame(spot, spot);
+      }
+      updateScoreLeds();
+      setStatus(`LVL ${gameState}`, "PLAYING…");
+      render();
+    }
+
+    if (buttonDown) {
+      buttonDown = false;
+      const hit = gameState <= 2
+        ? (position > spot - 1 && position < spot + 3)
+        : (position === spot + 1);
+      if (hit) { level = gameState; gameState = 98; winner(); }
+      else { const failedLevel = gameState; gameState = 99; loser(failedLevel); }
+    }
+  }
+}
+requestAnimationFrame(frame);
+
+log("Ready. Press the button or hit Space to start.");
+</script>
+</body>
+</html>
