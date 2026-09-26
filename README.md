@@ -25,7 +25,9 @@ with a 6-LED score strip and a fully customizable WiFi web interface.
 
 No board yet? **Play the real game logic right here** — it's a faithful browser port of the
 firmware (same 24-LED ring, same per-level speed curve, same win/lose flashes), plus the same
-difficulty presets and RGB color pickers as the real device's web UI.
+difficulty presets and RGB color pickers as the real device's web UI. The simulator adds its own
+arcade flair on top: a glowing comet trail behind the running LED, tick/hit/miss sound effects,
+a confetti burst on every level clear, and a screen-shake + flash when you miss the zone.
 
 <div align="center">
 
@@ -36,7 +38,7 @@ difficulty presets and RGB color pickers as the real device's web UI.
 ### [▶️ &nbsp;PLAY THE SIMULATOR](https://htmlpreview.github.io/?https://github.com/Am4l-babu/cyclone-game/blob/main/docs/simulator.html)
 
 <sub>Tap the button or press <kbd>Space</kbd> when the moving LED is in the glowing target zone
-· or just open <a href="docs/simulator.html"><code>docs/simulator.html</code></a> locally, no install needed</sub>
+· turn on 🔊 for sound · or just open <a href="docs/simulator.html"><code>docs/simulator.html</code></a> locally, no install needed</sub>
 
 </div>
 
@@ -54,6 +56,7 @@ difficulty presets and RGB color pickers as the real device's web UI.
 - 💾 **Persistent Storage** - All settings, colors, and custom presets saved to EEPROM
 - 🌈 **Waving rainbow attract mode** - Dynamic flowing animation when idle
 - 📱 Responsive dark-themed web UI optimized for mobile and desktop
+- 🕹️ **Interactive browser simulator** - comet-trail LED animation, sound effects, confetti win bursts and a shake/flash on misses
 
 ## Hardware Requirements
 
