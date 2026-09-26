@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cyclone Game Simulator</title>
-<meta name="description" content="Play the Cyclone Game ESP8266 firmware in your browser: same 24-LED ring, same speed curve, same win/lose flashes.">
+<meta name="description" content="Play the Cyclone Game ESP8266 firmware in your browser: same 24-LED ring, same speed curve, same win/lose flashes — now with sound, comet trails and confetti.">
 <style>
   :root {
     --bg: #1a1a2e; --card: #16213e; --line: #0f3460; --fg: #eee; --mut: #8fa3c7;
@@ -14,40 +14,88 @@
     :root { --bg: #eef1fb; --card: #ffffff; --line: #c7d2ee; --fg: #1a1a2e; --mut: #5b6b95; --off: #e2e7f7; }
   }
   * { box-sizing: border-box; }
+  html { background: var(--bg); }
   body {
     margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
     font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
     display: flex; flex-direction: column; align-items: center; padding: 24px 16px 40px;
+    position: relative; overflow-x: hidden;
   }
+
+  /* ---- ambient cyclone backdrop ---- */
+  .bg-fx { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+  .bg-fx i {
+    position: absolute; border-radius: 50%; filter: blur(60px); opacity: .35;
+    animation: drift 22s ease-in-out infinite;
+  }
+  .bg-fx i:nth-child(1) { width: 42vmax; height: 42vmax; left: -14vmax; top: -16vmax; background: radial-gradient(circle, var(--pink), transparent 70%); animation-duration: 26s; }
+  .bg-fx i:nth-child(2) { width: 36vmax; height: 36vmax; right: -12vmax; top: 8vmax; background: radial-gradient(circle, var(--purple), transparent 70%); animation-duration: 30s; animation-delay: -6s; }
+  .bg-fx i:nth-child(3) { width: 30vmax; height: 30vmax; left: 20vmax; bottom: -14vmax; background: radial-gradient(circle, var(--teal), transparent 70%); animation-duration: 34s; animation-delay: -12s; }
+  @keyframes drift {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(4vmax, -3vmax) scale(1.12); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bg-fx i { animation: none; }
+  }
+
   h1 { margin: 0; font-size: clamp(26px, 7vw, 38px); font-weight: 800; letter-spacing: .03em; text-align: center; }
-  h1 .w { color: var(--pink); text-shadow: 0 0 18px rgba(233,69,96,.5); }
+  h1 .w {
+    background: linear-gradient(90deg, var(--pink), var(--pink2), var(--purple), var(--teal), var(--pink));
+    background-size: 300% auto; -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: hue 6s linear infinite; text-shadow: 0 0 30px rgba(233,69,96,.25);
+  }
+  @keyframes hue { to { background-position: 300% center; } }
+  @media (prefers-reduced-motion: reduce) { h1 .w { animation: none; } }
   .sub { color: var(--mut); margin: 6px 0 22px; text-align: center; max-width: 44ch; line-height: 1.45; }
 
   .device {
     width: min(100%, 420px); background: var(--card); border: 1px solid var(--line);
     border-radius: 26px; padding: 20px; box-shadow: 0 16px 44px rgba(0,0,0,.35);
+    position: relative; transition: box-shadow .2s;
+  }
+  .device.shake { animation: shake .42s cubic-bezier(.36,.07,.19,.97) both; }
+  @keyframes shake {
+    10%, 90% { transform: translate3d(-2px, 0, 0); }
+    20%, 80% { transform: translate3d(4px, 0, 0); }
+    30%, 50%, 70% { transform: translate3d(-8px, 0, 0); }
+    40%, 60% { transform: translate3d(8px, 0, 0); }
   }
 
   .status {
-    display: flex; justify-content: space-between; align-items: center;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
     background: #000; border: 3px solid var(--line); border-radius: 10px;
     padding: 10px 14px; font: 700 13px/1.2 Consolas, monospace; letter-spacing: .04em;
     color: #7fffd4; margin-bottom: 4px;
   }
-  .status span:first-child { color: var(--pink2); }
-  .status .msg { color: #7fffd4; text-align: right; }
+  .status span:first-child { color: var(--pink2); white-space: nowrap; }
+  .status .msg { color: #7fffd4; text-align: right; flex: 1; }
+  .mute-btn {
+    flex: 0 0 auto; background: none; border: 1px solid #234; color: #7fffd4; border-radius: 6px;
+    width: 26px; height: 26px; font-size: 13px; cursor: pointer; line-height: 1;
+  }
+  .mute-btn:hover { border-color: #7fffd4; }
 
   /* ---- Main 24-LED ring + center button ---- */
   .ring { position: relative; width: 100%; aspect-ratio: 1; margin-top: 16px; }
+  .cyclone-ring {
+    position: absolute; inset: -4%; border-radius: 50%; pointer-events: none;
+    background: conic-gradient(from 0deg, transparent 0deg, var(--pink) 18deg, transparent 46deg,
+      transparent 180deg, var(--teal) 198deg, transparent 226deg, transparent 360deg);
+    opacity: .28; animation: spin 9s linear infinite; filter: blur(1px);
+    transition: opacity .3s;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .cyclone-ring { animation: none; } }
   .dot {
     position: absolute; width: 6.6%; aspect-ratio: 1; border-radius: 50%;
-    transform: translate(-50%, -50%); background: var(--off); transition: background .04s, box-shadow .04s;
+    transform: translate(-50%, -50%); background: var(--off); transition: background .12s, box-shadow .12s;
   }
   .hub {
-    position: absolute; inset: 27%; border-radius: 50%;
+    position: absolute; inset: 27%; border-radius: 50%; z-index: 1;
     background: radial-gradient(circle at 35% 30%, #ffffff22, transparent 60%), var(--purple);
     border: 4px solid #7a4fc9; cursor: pointer; color: #fff; -webkit-tap-highlight-color: transparent;
-    display: flex; align-items: center; justify-content: center; text-align: center;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
     font: 800 15px/1.25 inherit; padding: 10%; user-select: none; touch-action: manipulation;
     box-shadow: 0 0 0 0 rgba(233,69,96,0); transition: box-shadow .15s, transform .06s, background .2s;
   }
@@ -59,14 +107,17 @@
     50% { box-shadow: 0 0 0 16px rgba(83,52,131,0); }
   }
   .hub:focus-visible { outline: 2px solid var(--fg); outline-offset: 4px; }
+  .hub .lvl { display: block; font-size: 10px; font-weight: 700; opacity: .8; margin-top: 3px; letter-spacing: .06em; white-space: nowrap; }
 
   /* ---- 6 score LEDs ---- */
   .score { display: flex; justify-content: center; gap: 10px; margin-top: 18px; }
   .sdot {
     width: 15%; max-width: 34px; aspect-ratio: 1; border-radius: 50%;
     background: var(--off); box-shadow: inset 0 0 0 2px var(--line);
-    transition: background .3s, box-shadow .3s;
+    transition: background .3s, box-shadow .3s, transform .3s;
   }
+  .sdot.pop { animation: pop .4s ease; }
+  @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
   .score-label { text-align: center; color: var(--mut); font-size: 11px; letter-spacing: .12em; margin-top: 6px; }
 
   /* ---- controls ---- */
@@ -78,9 +129,10 @@
   .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
   .btn {
     background: transparent; color: var(--fg); border: 1px solid var(--line); border-radius: 999px;
-    padding: 8px 14px; font: 700 12.5px/1 inherit; cursor: pointer; transition: background .15s, border-color .15s;
+    padding: 8px 14px; font: 700 12.5px/1 inherit; cursor: pointer; transition: background .15s, border-color .15s, transform .1s;
   }
   .btn:hover { border-color: var(--mut); }
+  .btn:active { transform: scale(.94); }
   .btn[aria-pressed="true"] { background: var(--pink); border-color: var(--pink); color: #fff; }
   .swatches { display: flex; align-items: center; justify-content: center; gap: 22px; flex-wrap: wrap; }
   .swatch { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; color: var(--mut); }
@@ -116,20 +168,42 @@
   }
   footer { margin-top: 22px; color: var(--mut); font-size: 12px; text-align: center; line-height: 1.6; }
   footer a { color: inherit; }
+
+  /* ---- confetti + flash overlays ---- */
+  .confetti-layer { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 2; }
+  .confetti-piece {
+    position: absolute; top: 50%; left: 50%; width: 7px; height: 12px; border-radius: 2px;
+    animation: confetti-burst .9s cubic-bezier(.2,.7,.3,1) forwards;
+  }
+  @keyframes confetti-burst {
+    to { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; }
+  }
+  .flash-overlay {
+    position: fixed; inset: 0; pointer-events: none; z-index: 50; opacity: 0;
+    background: radial-gradient(circle, transparent 40%, rgba(233,69,96,.55) 140%);
+    transition: opacity .08s ease-out;
+  }
+  .flash-overlay.hit { opacity: 1; transition: opacity .5s ease-out; }
 </style>
 </head>
 <body>
-  <h1><span class="w">CYCLONE</span> GAME</h1>
-  <p class="sub">A browser port of the ESP8266 firmware: same 24-LED ring, same speed curve per level, same win / lose flashes.</p>
+  <div class="bg-fx" aria-hidden="true"><i></i><i></i><i></i></div>
+  <div class="flash-overlay" id="flash" aria-hidden="true"></div>
 
-  <main class="device">
+  <h1><span class="w">CYCLONE</span> GAME</h1>
+  <p class="sub">A browser port of the ESP8266 firmware: same 24-LED ring, same speed curve per level, same win / lose flashes — plus sound, comet trails and confetti.</p>
+
+  <main class="device" id="device">
     <div class="status">
       <span id="stLevel">LVL --</span>
       <span class="msg" id="stMsg">ATTRACT MODE</span>
+      <button class="mute-btn" id="muteBtn" type="button" aria-pressed="false" title="Toggle sound">🔊</button>
     </div>
 
     <div class="ring" id="ring">
-      <button class="hub pulse" id="hub" aria-label="Cyclone button">PRESS<br>TO PLAY</button>
+      <div class="cyclone-ring" aria-hidden="true"></div>
+      <button class="hub pulse" id="hub" aria-label="Cyclone button"><span>PRESS</span><span>TO PLAY</span></button>
+      <div class="confetti-layer" id="confetti" aria-hidden="true"></div>
     </div>
 
     <div class="score" id="score" aria-hidden="true"></div>
@@ -163,7 +237,7 @@
     </div>
 
     <p class="hint">Tap the button (or press <kbd>Space</kbd>) when the moving LED is in the glowing target zone.<br>
-      Levels 1–2 give a wide 3-LED window — levels 3–6 need an exact hit.</p>
+      Levels 1–2 give a wide 3-LED window — levels 3–6 need an exact hit. Turn on sound 🔊 for tick / hit / miss feedback.</p>
   </main>
 
   <details>
@@ -195,12 +269,14 @@ const PRESETS = [
 const $ = (s) => document.querySelector(s);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /* ------------------------------------------------------------------ *
  *  Build the 24-LED ring + 6 score LEDs
  * ------------------------------------------------------------------ */
 const ringEl = $("#ring");
 const hub = $("#hub");
+const cycloneRing = $(".cyclone-ring");
 const dots = [];
 for (let i = 0; i < NUM_LEDS; i++) {
   const a = (i / NUM_LEDS) * Math.PI * 2 - Math.PI / 2;
@@ -227,7 +303,7 @@ function hexToRgb(hex) {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
-function rgbCss([r, g, b]) { return `rgb(${r},${g},${b})`; }
+function rgbCss([r, g, b], a = 1) { return a >= 1 ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${a.toFixed(3)})`; }
 function scale8([r, g, b], s) { return [r * s / 255 | 0, g * s / 255 | 0, b * s / 255 | 0]; }
 function hsv(h, s, v) { // h,s,v in 0-255, like CHSV
   const hh = h / 255 * 6, i = Math.floor(hh) % 6, f = hh - Math.floor(hh);
@@ -251,9 +327,13 @@ function levelColor(level) { // green (easy) -> red (hard), like getLevelColor()
 
 /* ------------------------------------------------------------------ *
  *  Rendering: leds[] / sleds[] arrays -> DOM, scaled by "brightness"
+ *  Plus a decorative comet trail behind the moving LED (visual only,
+ *  it never feeds back into the ported game logic below).
  * ------------------------------------------------------------------ */
 const leds = Array.from({ length: NUM_LEDS }, () => null);   // null = off, else [r,g,b]
 const sleds = Array.from({ length: SCORE_LEDS }, () => null);
+const trail = new Float32Array(NUM_LEDS);   // 0..1 decaying glow left behind the runner
+let trailColor = [255, 0, 0];
 let brightness = 55;
 
 function paintDot(el, rgb) {
@@ -263,11 +343,99 @@ function paintDot(el, rgb) {
   el.style.background = css;
   el.style.boxShadow = `0 0 12px 2px ${css}`;
 }
+function paintTrail(el, i) {
+  const a = trail[i];
+  if (a <= 0.02) return;
+  const b = scale8(trailColor, clamp(brightness * 1.6, 60, 255));
+  el.style.background = rgbCss(b, a * 0.85);
+  el.style.boxShadow = `0 0 ${8 * a}px 1px ${rgbCss(b, a * 0.6)}`;
+}
 function render() {
-  for (let i = 0; i < NUM_LEDS; i++) paintDot(dots[i], leds[i]);
+  for (let i = 0; i < NUM_LEDS; i++) {
+    if (leds[i]) paintDot(dots[i], leds[i]);
+    else if (trail[i] > 0.02) paintTrail(dots[i], i);
+    else paintDot(dots[i], null);
+  }
   for (let i = 0; i < SCORE_LEDS; i++) paintDot(sdots[i], sleds[i]);
 }
-function clearLEDS() { leds.fill(null); sleds.fill(null); }
+function decayTrail() {
+  for (let i = 0; i < NUM_LEDS; i++) if (trail[i] > 0) trail[i] *= 0.82;
+}
+function clearLEDS() { leds.fill(null); sleds.fill(null); trail.fill(0); }
+
+/* ------------------------------------------------------------------ *
+ *  Tiny sound engine (Web Audio) — ticks / hit / miss / fanfare.
+ *  Muted by default until the visitor opts in (browser autoplay rules
+ *  also require a gesture, which the button/key press satisfies).
+ * ------------------------------------------------------------------ */
+let muted = true;
+let actx = null;
+function audioCtx() {
+  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  return actx;
+}
+function tone(freq, dur, type = "sine", gain = 0.07, delay = 0) {
+  if (muted) return;
+  const c = audioCtx();
+  const o = c.createOscillator();
+  const g = c.createGain();
+  o.type = type;
+  o.frequency.value = freq;
+  o.connect(g);
+  g.connect(c.destination);
+  const t0 = c.currentTime + delay;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(gain, t0 + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.start(t0);
+  o.stop(t0 + dur + 0.02);
+}
+function sfxTick() { tone(280, 0.03, "square", 0.035); }
+function sfxHit() { tone(660, 0.1, "triangle", 0.09); tone(990, 0.16, "triangle", 0.08, 0.07); }
+function sfxMiss() { tone(160, 0.35, "sawtooth", 0.1); tone(90, 0.4, "sawtooth", 0.08, 0.05); }
+function sfxWin() {
+  [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.18, "triangle", 0.09, i * 0.11));
+}
+const muteBtn = $("#muteBtn");
+muteBtn.addEventListener("click", () => {
+  muted = !muted;
+  if (!muted) audioCtx().resume();
+  muteBtn.textContent = muted ? "🔇" : "🔊";
+  muteBtn.setAttribute("aria-pressed", String(!muted));
+});
+
+/* ------------------------------------------------------------------ *
+ *  Confetti burst (win) + screen shake / flash (miss) — pure flair,
+ *  independent of the game state machine.
+ * ------------------------------------------------------------------ */
+const confettiLayer = $("#confetti");
+const deviceEl = $("#device");
+const flashEl = $("#flash");
+const CONFETTI_COLORS = ["#e94560", "#ff6b81", "#533483", "#05a8aa", "#2ee66b", "#ffd23f"];
+function burstConfetti() {
+  if (reduceMotion) return;
+  const n = 26;
+  for (let i = 0; i < n; i++) {
+    const p = document.createElement("i");
+    p.className = "confetti-piece";
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 60 + Math.random() * 120;
+    p.style.setProperty("--dx", `${Math.cos(angle) * dist}px`);
+    p.style.setProperty("--dy", `${Math.sin(angle) * dist}px`);
+    p.style.setProperty("--rot", `${(Math.random() * 720 - 360).toFixed(0)}deg`);
+    p.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+    p.style.animationDelay = `${Math.random() * 0.12}s`;
+    confettiLayer.appendChild(p);
+    p.addEventListener("animationend", () => p.remove());
+  }
+}
+function shakeAndFlash() {
+  deviceEl.classList.remove("shake");
+  void deviceEl.offsetWidth; // restart animation
+  if (!reduceMotion) deviceEl.classList.add("shake");
+  flashEl.classList.add("hit");
+  setTimeout(() => flashEl.classList.remove("hit"), 60);
+}
 
 /* ------------------------------------------------------------------ *
  *  Settings (colors / speeds / brightness) — driven by the UI panel
@@ -275,8 +443,9 @@ function clearLEDS() { leds.fill(null); sleds.fill(null); }
 let runningColor = hexToRgb("#ff0000");
 let targetColor = hexToRgb("#00ff00");
 let ledSpeed = PRESETS[3].slice();
+trailColor = runningColor;
 
-$("#runColor").addEventListener("input", (e) => { runningColor = hexToRgb(e.target.value); });
+$("#runColor").addEventListener("input", (e) => { runningColor = hexToRgb(e.target.value); trailColor = runningColor; });
 $("#targColor").addEventListener("input", (e) => { targetColor = hexToRgb(e.target.value); });
 $("#bright").addEventListener("input", (e) => {
   brightness = +e.target.value; $("#brightVal").textContent = brightness; render();
@@ -303,12 +472,22 @@ function log(line) {
   serial.scrollTop = serial.scrollHeight;
 }
 function setStatus(levelTxt, msg) { stLevel.textContent = levelTxt; stMsg.textContent = msg; }
+function popScoreLed(i) {
+  const el = sdots[i];
+  el.classList.remove("pop");
+  void el.offsetWidth;
+  el.classList.add("pop");
+}
 
 /* ------------------------------------------------------------------ *
  *  Button input: one flag, consumed once per read — like digitalRead()
  * ------------------------------------------------------------------ */
 let buttonDown = false;
-function press() { buttonDown = true; }
+function press() {
+  buttonDown = true;
+  if (muted) return; // first press won't beep, but unlocks audio for later toggling
+  audioCtx().resume();
+}
 hub.addEventListener("pointerdown", (e) => { e.preventDefault(); press(); });
 addEventListener("keydown", (e) => {
   if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -327,11 +506,14 @@ let rainbowHue = 0;
 let timeNow = 0;
 let running = true;
 let busy = false;       // true while a win/lose flash sequence owns the LEDs
+let lastScoreCount = 0;
 
 function playGame(b1, b2) {
+  trail[position] = 1;
   leds[position] = runningColor;
   if (position < b1 + 1 || position > b2 + 1) leds[(position + NUM_LEDS - 1) % NUM_LEDS] = null;
   position = (position + 1) % NUM_LEDS;
+  sfxTick();
 }
 
 async function winner() {
@@ -339,17 +521,22 @@ async function winner() {
   hub.classList.remove("stopnow");
   setStatus(`LVL ${level}`, "🎯 HIT!");
   log(`HIT! Level ${level} complete.`);
+  sfxHit();
+  burstConfetti();
   for (let i = 0; i < 3; i++) {
     leds.fill(targetColor); render(); await sleep(500);
     leds.fill(null); render(); await sleep(500);
   }
-  findRandom = true; position = 0;
+  findRandom = true; position = 0; trail.fill(0);
   gameState = level + 1;
   if (gameState > 6) {
     setStatus("WIN!", "🏆 ALL LEVELS CLEARED");
     log("*** ALL 6 LEVELS CLEARED — WINNER! ***");
-    await sleep(600);
+    sfxWin();
+    burstConfetti();
+    await sleep(700);
     gameState = 0;
+    for (const el of sdots) el.classList.remove("pop");
   }
   busy = false;
 }
@@ -359,29 +546,38 @@ async function loser(failedLevel) {
   hub.classList.remove("stopnow");
   setStatus(`LVL ${failedLevel}`, "✖ MISS!");
   log(`MISS! Game over at level ${failedLevel}.`);
+  sfxMiss();
+  shakeAndFlash();
   for (let i = 0; i < 3; i++) {
     leds.fill(runningColor); render(); await sleep(500);
     leds.fill(null); render(); await sleep(500);
   }
   gameState = 0;
+  trail.fill(0);
   busy = false;
 }
 
 function updateScoreLeds() {
   for (let i = 0; i < gameState; i++) sleds[i] = levelColor(i + 1);
   for (let i = gameState; i < SCORE_LEDS; i++) sleds[i] = null;
+  if (gameState > lastScoreCount) popScoreLed(gameState - 1);
+  lastScoreCount = gameState;
 }
 
 function frame(ts) {
   if (running) requestAnimationFrame(frame);
-  if (busy) return;
+  decayTrail();
+  if (busy) { render(); return; }
 
   if (gameState === 0) {
     hub.classList.add("pulse");
-    hub.innerHTML = "PRESS<br>TO PLAY";
+    hub.innerHTML = "<span>PRESS</span><span>TO PLAY</span>";
+    cycloneRing.style.animationDuration = "9s";
+    cycloneRing.style.opacity = ".28";
     for (let i = 0; i < NUM_LEDS; i++) leds[i] = hsv((rainbowHue + i * (255 / NUM_LEDS) * 0.4) & 255, 255, 255);
     for (let i = 0; i < SCORE_LEDS; i++) sleds[i] = hsv((rainbowHue + i * (255 / SCORE_LEDS) * 0.9) & 255, 255, 255);
     rainbowHue = (rainbowHue + 2) & 255;
+    lastScoreCount = 0;
     render();
     setStatus("LVL --", "ATTRACT MODE");
 
@@ -396,8 +592,10 @@ function frame(ts) {
   if (gameState >= 1 && gameState <= 6) {
     hub.classList.remove("pulse");
     hub.classList.add("stopnow");
-    hub.innerHTML = "STOP!";
+    hub.innerHTML = `<span>STOP!</span><span class="lvl">LEVEL ${gameState}</span>`;
     const period = ledSpeed[gameState - 1];
+    cycloneRing.style.animationDuration = `${clamp(period * NUM_LEDS / 1000, 0.6, 6).toFixed(2)}s`;
+    cycloneRing.style.opacity = ".4";
 
     if (ts - timeNow > period) {
       timeNow = ts;
@@ -414,8 +612,8 @@ function frame(ts) {
       }
       updateScoreLeds();
       setStatus(`LVL ${gameState}`, "PLAYING…");
-      render();
     }
+    render();
 
     if (buttonDown) {
       buttonDown = false;
@@ -429,7 +627,7 @@ function frame(ts) {
 }
 requestAnimationFrame(frame);
 
-log("Ready. Press the button or hit Space to start.");
+log("Ready. Press the button or hit Space to start. Tap 🔊 to enable sound.");
 </script>
 </body>
 </html>
